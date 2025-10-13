@@ -285,3 +285,6 @@ npm publish --access public
 - JavaScript: `@lexia/sdk` v1.2.5
 - Both versions have identical API and features
 
+
+
+

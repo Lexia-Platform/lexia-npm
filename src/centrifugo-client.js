@@ -113,7 +113,7 @@ class CentrifugoClient {
   async sendError(channel, uuid, threadId, errorMessage) {
     const data = {
       error: true,
-      content: 'An ERROR occurred',
+      content: errorMessage,
       finished: true,
       uuid,
       thread_id: threadId,
@@ -125,4 +125,7 @@ class CentrifugoClient {
 }
 
 module.exports = { CentrifugoClient };
+
+
+
 

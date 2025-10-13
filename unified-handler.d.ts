@@ -36,8 +36,10 @@ export class LexiaHandler {
      * Uses DevStreamClient in dev mode, Centrifugo in production.
      * @param {Object} data - Request data
      * @param {string} errorMessage - Error message to send
+     * @param {string} trace - Optional stack trace string
+     * @param {Error} exception - Optional exception object (will extract trace from it)
      */
-    sendError(data: any, errorMessage: string): Promise<void>;
+    sendError(data: any, errorMessage: string, trace?: string, exception?: Error): Promise<void>;
 }
 import { CentrifugoClient } from "./centrifugo-client";
 import { DevStreamClient } from "./dev-stream-client";

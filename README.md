@@ -140,8 +140,10 @@ await lexia.streamChunk(data, content);
 // Complete AI response (handles all Lexia communication)
 await lexia.completeResponse(data, fullResponse);
 
-// Send error messages
+// Send error messages (with optional trace/exception for logging)
 await lexia.sendError(data, errorMessage);
+// Or with exception for detailed logging:
+await lexia.sendError(data, errorMessage, null, error);
 
 // Update Centrifugo configuration dynamically
 lexia.updateCentrifugoConfig(streamUrl, streamToken);
@@ -318,8 +320,8 @@ async function processMessage(data) {
     await lexia.completeResponse(data, response);
     
   } catch (error) {
-    // Handle errors appropriately
-    await lexia.sendError(data, `Error processing message: ${error.message}`);
+    // Handle errors appropriately with trace logging
+    await lexia.sendError(data, `Error processing message: ${error.message}`, null, error);
   }
 }
 

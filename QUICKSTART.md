@@ -128,3 +128,6 @@ const lexia = new LexiaHandler(true); // Dev mode
 - 🐛 [Report Issues](https://github.com/Xalantico/lexia-npm/issues)
 - 💬 [Ask Questions](https://github.com/Xalantico/lexia-npm/discussions)
 
+
+
+

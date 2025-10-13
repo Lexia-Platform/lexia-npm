@@ -1,6 +1,6 @@
 {
   "name": "@lexia/sdk",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Clean, minimal package for Lexia platform integration",
   "main": "src/index.js",
   "types": "src/index.d.ts",

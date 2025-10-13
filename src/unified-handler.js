@@ -161,23 +161,35 @@ class LexiaHandler {
    * Uses DevStreamClient in dev mode, Centrifugo in production.
    * @param {Object} data - Request data
    * @param {string} errorMessage - Error message to send
+   * @param {string} trace - Optional stack trace string
+   * @param {Error} exception - Optional exception object (will extract trace from it)
    */
-  async sendError(data, errorMessage) {
+  async sendError(data, errorMessage, trace = null, exception = null) {
     // Update config if dynamic values are provided (production only)
     if (!this.devMode && data.stream_url && data.stream_token) {
       this.updateCentrifugoConfig(data.stream_url, data.stream_token);
     }
     
-    // Send error notification via appropriate streaming client
-    await this.streamClient.sendError(data.channel, data.response_uuid, data.thread_id, errorMessage);
+    // Format error message for display
+    const errorDisplayMessage = `❌ **Error:** ${errorMessage}`;
     
-    // In dev mode, skip backend API call if URL is not provided
-    if (this.devMode && !data.url) {
-      console.log('🔧 Dev mode: Skipping error API call (no URL provided)');
+    // In DEV mode: Stream exactly like normal responses (chunk + complete)
+    if (this.devMode) {
+      // Stream the error message as chunks (same as normal content)
+      await this.streamClient.sendDelta(data.channel, data.response_uuid, data.thread_id, errorDisplayMessage);
+      // Complete the stream (same as normal completion)
+      await this.streamClient.sendCompletion(data.channel, data.response_uuid, data.thread_id, errorDisplayMessage);
+      console.log('🔧 Dev mode: Error streamed to frontend (delta + complete), skipping backend API calls');
       return;
     }
     
-    // Skip if no URL provided
+    // PRODUCTION mode: Different flow for Centrifugo
+    // First stream the error as visible content
+    await this.streamClient.sendDelta(data.channel, data.response_uuid, data.thread_id, errorDisplayMessage);
+    // Then send error signal via Centrifugo
+    await this.streamClient.sendError(data.channel, data.response_uuid, data.thread_id, errorMessage);
+    
+    // Skip if no URL provided (production mode only)
     if (!data.url) {
       console.warn('⚠️  No URL provided, skipping error API call');
       return;
@@ -232,8 +244,62 @@ class LexiaHandler {
     } catch (error) {
       console.error(`Failed to persist error to backend API:`, error.message);
     }
+    
+    // Also send error to logging endpoint (api/internal/v1/logs)
+    try {
+      // Extract base URL from data.url
+      const url = new URL(data.url);
+      const baseUrl = `${url.protocol}//${url.host}`;
+      const logUrl = `${baseUrl}/api/internal/v1/logs`;
+      
+      // Get stack trace from various sources
+      let traceInfo = '';
+      if (trace) {
+        // Use provided trace string
+        traceInfo = trace;
+      } else if (exception && exception.stack) {
+        // Extract trace from exception object
+        traceInfo = exception.stack;
+      }
+      
+      // Prepare log payload according to Laravel API spec
+      const logPayload = {
+        message: errorMessage.substring(0, 1000), // Max 1000 chars as per validation
+        trace: traceInfo ? traceInfo.substring(0, 5000) : '', // Max 5000 chars as per validation
+        level: 'error', // error, warning, info, or critical
+        where: 'lexia-sdk', // Where the error occurred
+        additional: {
+          uuid: data.response_uuid,
+          conversation_id: data.conversation_id,
+          thread_id: data.thread_id,
+          channel: data.channel
+        }
+      };
+      
+      console.log('=== SENDING ERROR LOG TO LEXIA ===');
+      console.log(`Log URL: ${logUrl}`);
+      console.log('Log Payload:', logPayload);
+      
+      // Send to logging endpoint
+      const logResponse = await this.api.post(logUrl, logPayload, requestHeaders);
+      
+      console.log('=== LEXIA LOG API RESPONSE ===');
+      console.log(`Status Code: ${logResponse.status}`);
+      console.log('Response Content:', logResponse.data);
+      
+      if (logResponse.status !== 200) {
+        console.error(`LEXIA LOG API FAILED: ${logResponse.status} - ${logResponse.data}`);
+      } else {
+        console.log('✅ LEXIA LOG API SUCCESS: Error logged to backend');
+      }
+    } catch (error) {
+      console.error(`Failed to send error log to Lexia:`, error.message);
+    }
   }
 }
 
 module.exports = { LexiaHandler };
+
+
+
 
