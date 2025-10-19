@@ -8,6 +8,8 @@ export class LexiaHandler {
     devMode: boolean;
     streamClient: CentrifugoClient | DevStreamClient;
     api: APIClient;
+    _buffers: Map<any, any>;
+    _markerAliases: Map<string, string>;
     /**
      * Update Centrifugo configuration with dynamic values from request.
      * Only applicable in production mode.
@@ -22,6 +24,9 @@ export class LexiaHandler {
      * @param {string} content - Content chunk to stream
      */
     streamChunk(data: any, content: string): Promise<void>;
+    /** Developer-friendly streaming that also aggregates for finalization */
+    stream(data: any, content: any): Promise<void>;
+    _drainBuffer(uuid: any): any;
     /**
      * Complete AI response and send to Lexia.
      * Uses DevStreamClient in dev mode, Centrifugo in production.
@@ -31,6 +36,8 @@ export class LexiaHandler {
      * @param {string} fileUrl - File URL for generated files (optional)
      */
     completeResponse(data: any, fullResponse: string, usageInfo?: any, fileUrl?: string): Promise<void>;
+    /** Finalize using aggregated buffer, return finalized text */
+    close(data: any, usageInfo?: any, fileUrl?: any): Promise<any>;
     /**
      * Send error message via streaming client and persist to backend API.
      * Uses DevStreamClient in dev mode, Centrifugo in production.
@@ -40,8 +47,23 @@ export class LexiaHandler {
      * @param {Error} exception - Optional exception object (will extract trace from it)
      */
     sendError(data: any, errorMessage: string, trace?: string, exception?: Error): Promise<void>;
+    begin(data: any): LexiaSession;
 }
 import { CentrifugoClient } from "./centrifugo-client";
 import { DevStreamClient } from "./dev-stream-client";
 import { APIClient } from "./api-client";
+declare class LexiaSession {
+    constructor(handler: any, data: any);
+    _h: any;
+    _d: any;
+    stream(content: any): Promise<any>;
+    close(usageInfo?: any, fileUrl?: any): Promise<any>;
+    error(message: any, exception?: any, trace?: any): Promise<any>;
+    _loadingMarker(kind: any, action: any): string;
+    start_loading(kind?: string): Promise<any>;
+    end_loading(kind?: string): Promise<any>;
+    image(url: any): Promise<any>;
+    pass_image(url: any): Promise<any>;
+}
+export {};
 //# sourceMappingURL=unified-handler.d.ts.map

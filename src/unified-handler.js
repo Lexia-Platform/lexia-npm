@@ -36,6 +36,22 @@ class LexiaHandler {
     }
     
     this.api = new APIClient();
+
+    // Internal aggregation buffers keyed by response UUID
+    this._buffers = new Map();
+    
+    // Semantic marker aliases (developer-friendly strings)
+    this._markerAliases = new Map([
+      ['show image load', '[lexia.loading.image.start]\n\n'],
+      ['end image load', '[lexia.loading.image.end]\n\n'],
+      ['hide image load', '[lexia.loading.image.end]\n\n'],
+      ['show code load', '[lexia.loading.code.start]\n\n'],
+      ['end code load', '[lexia.loading.code.end]\n\n'],
+      ['show search load', '[lexia.loading.search.start]\n\n'],
+      ['end search load', '[lexia.loading.search.end]\n\n'],
+      ['show thinking load', '[lexia.loading.thinking.start]\n\n'],
+      ['end thinking load', '[lexia.loading.thinking.end]\n\n'],
+    ]);
   }
 
   /**
@@ -74,6 +90,30 @@ class LexiaHandler {
     
     await this.streamClient.sendDelta(data.channel, data.response_uuid, data.thread_id, content);
     console.log(`🟢 [HANDLER] Chunk sent to streamClient.sendDelta()`);
+  }
+
+  /** Developer-friendly streaming that also aggregates for finalization */
+  async stream(data, content) {
+    // Normalize semantic commands to markers
+    if (typeof content === 'string') {
+      const key = content.trim().toLowerCase();
+      if (this._markerAliases.has(key)) {
+        content = this._markerAliases.get(key);
+      }
+    }
+    // Append to buffer
+    const uuid = data.response_uuid;
+    if (!this._buffers.has(uuid)) this._buffers.set(uuid, []);
+    this._buffers.get(uuid).push(content);
+    // Forward chunk
+    await this.streamChunk(data, content);
+  }
+
+  _drainBuffer(uuid) {
+    if (!uuid) return '';
+    const parts = this._buffers.get(uuid) || [];
+    this._buffers.delete(uuid);
+    return parts.length ? parts.join('') : '';
   }
 
   /**
@@ -156,6 +196,13 @@ class LexiaHandler {
     }
   }
 
+  /** Finalize using aggregated buffer, return finalized text */
+  async close(data, usageInfo = null, fileUrl = null) {
+    const full = this._drainBuffer(data.response_uuid);
+    await this.completeResponse(data, full, usageInfo, fileUrl);
+    return full;
+  }
+
   /**
    * Send error message via streaming client and persist to backend API.
    * Uses DevStreamClient in dev mode, Centrifugo in production.
@@ -175,6 +222,8 @@ class LexiaHandler {
     
     // In DEV mode: Stream exactly like normal responses (chunk + complete)
     if (this.devMode) {
+      // Clear any pending aggregation
+      this._drainBuffer(data.response_uuid);
       // Stream the error message as chunks (same as normal content)
       await this.streamClient.sendDelta(data.channel, data.response_uuid, data.thread_id, errorDisplayMessage);
       // Complete the stream (same as normal completion)
@@ -188,6 +237,8 @@ class LexiaHandler {
     await this.streamClient.sendDelta(data.channel, data.response_uuid, data.thread_id, errorDisplayMessage);
     // Then send error signal via Centrifugo
     await this.streamClient.sendError(data.channel, data.response_uuid, data.thread_id, errorMessage);
+    // Clear any pending aggregation
+    this._drainBuffer(data.response_uuid);
     
     // Skip if no URL provided (production mode only)
     if (!data.url) {
@@ -298,7 +349,40 @@ class LexiaHandler {
   }
 }
 
+// Session object to avoid passing data repeatedly
+class LexiaSession {
+  constructor(handler, data) {
+    this._h = handler;
+    this._d = data;
+    // Preconfigure Centrifugo in prod
+    if (!handler.devMode && data.stream_url && data.stream_token) {
+      handler.updateCentrifugoConfig(data.stream_url, data.stream_token);
+    }
+  }
+  async stream(content) { return this._h.stream(this._d, content); }
+  async close(usageInfo = null, fileUrl = null) { return this._h.close(this._d, usageInfo, fileUrl); }
+  async error(message, exception = null, trace = null) { return this._h.sendError(this._d, message, trace, exception); }
+  // Loading helpers
+  _loadingMarker(kind, action) {
+    const k = (kind || 'thinking').toLowerCase();
+    const a = action === 'start' ? 'start' : 'end';
+    return `[lexia.loading.${['image','code','search','thinking'].includes(k)?k:'thinking'}.${a}]\n\n`;
+  }
+  async start_loading(kind = 'thinking') { return this.stream(this._loadingMarker(kind, 'start')); }
+  async end_loading(kind = 'thinking') { return this.stream(this._loadingMarker(kind, 'end')); }
+  async image(url) { if (url) return this.stream(`[lexia.image.start]${url}[lexia.image.end]`); }
+  async pass_image(url) { return this.image(url); }
+}
+
+LexiaHandler.prototype.begin = function(data) { return new LexiaSession(this, data); };
+
 module.exports = { LexiaHandler };
+
+
+
+
+
+
 
 
 
