@@ -33,12 +33,13 @@ export interface ChatMessageData {
   channel: string;
   file_type?: string;
   file_url?: string;
+  file_base64?: string;
+  file_name?: string;
   variables: Variable[];
   url: string;
   url_update?: string;
   url_upload?: string;
-  force_search?: boolean;
-  force_code?: boolean | null;
+  force_tools?: string[] | null;
   system_message?: string | null;
   memory?: Memory | Record<string, any> | any[];
   project_system_message?: string | null;
@@ -48,6 +49,7 @@ export interface ChatMessageData {
   stream_url?: string | null;
   stream_token?: string | null;
   headers?: Record<string, string> | null;
+  sleep_time?: number | null;
 }
 
 export class ChatMessage {
@@ -60,12 +62,13 @@ export class ChatMessage {
   channel: string;
   file_type: string;
   file_url: string;
+  file_base64: string;
+  file_name: string;
   variables: Variable[];
   url: string;
   url_update: string;
   url_upload: string;
-  force_search: boolean;
-  force_code: boolean | null;
+  force_tools: string[] | null;
   system_message: string | null;
   memory: Memory | Record<string, any> | any[];
   project_system_message: string | null;
@@ -75,6 +78,7 @@ export class ChatMessage {
   stream_url: string | null;
   stream_token: string | null;
   headers: Record<string, string> | null;
+  sleep_time: number | null;
   
   constructor(data: ChatMessageData);
 }
@@ -140,19 +144,41 @@ export function createCompleteResponse(
 ): Record<string, any>;
 
 // Unified Handler
+export class LexiaSession {
+  stream(content: string): Promise<void>;
+  close(usageInfo?: Record<string, any> | null, fileUrl?: string | null): Promise<string>;
+  error(message: string, exception?: Error | null, trace?: string | null): Promise<void>;
+  start_loading(kind?: string): Promise<void>;
+  end_loading(kind?: string): Promise<void>;
+  image(url: string): Promise<void>;
+  pass_image(url: string): Promise<void>;
+  tracing(content: string, visibility?: 'all' | 'admin'): Promise<void>;
+  tracing_begin(message: string, visibility?: 'all' | 'admin'): void;
+  tracing_append(message: string): void;
+  tracing_end(message?: string | null): Promise<void>;
+}
+
 export class LexiaHandler {
   devMode: boolean;
   
   constructor(devMode?: boolean | null);
   updateCentrifugoConfig(streamUrl: string, streamToken: string): void;
   streamChunk(data: ChatMessage | ChatMessageData, content: string): Promise<void>;
+  stream(data: ChatMessage | ChatMessageData, content: string): Promise<void>;
   completeResponse(
     data: ChatMessage | ChatMessageData,
     fullResponse: string,
     usageInfo?: Record<string, any> | null,
     fileUrl?: string | null
   ): Promise<void>;
-  sendError(data: ChatMessage | ChatMessageData, errorMessage: string): Promise<void>;
+  close(data: ChatMessage | ChatMessageData, usageInfo?: Record<string, any> | null, fileUrl?: string | null): Promise<string>;
+  sendError(
+    data: ChatMessage | ChatMessageData, 
+    errorMessage: string, 
+    trace?: string | null, 
+    exception?: Error | null
+  ): Promise<void>;
+  begin(data: ChatMessage | ChatMessageData): LexiaSession;
 }
 
 // Utils
@@ -172,6 +198,14 @@ export class MemoryHelper {
   hasPastExperiences(): boolean;
   toDict(): Record<string, any>;
   isEmpty(): boolean;
+}
+
+export class ForceToolsHelper {
+  constructor(forceTools?: string[] | null);
+  has(toolName: string): boolean;
+  getAll(): string[];
+  isEmpty(): boolean;
+  count(): number;
 }
 
 export class Variables {
@@ -194,6 +228,10 @@ export function formatMessagesForAI(
   conversationHistory: any[],
   currentMessage: string
 ): any[];
+export function decodeBase64File(
+  fileBase64: string,
+  filename?: string | null
+): { filePath: string; isTempFile: boolean };
 
 // Web (optional)
 export interface AppOptions {
@@ -211,6 +249,15 @@ export interface EndpointOptions {
 
 export function createLexiaApp(options?: AppOptions): any;
 export function addStandardEndpoints(app: any, options?: EndpointOptions): any;
+
+
+
+
+
+
+
+
+
 
 
 

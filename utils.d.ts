@@ -43,6 +43,38 @@ export class MemoryHelper {
     isEmpty(): boolean;
 }
 /**
+ * Helper class for easy access to force_tools data from Lexia requests.
+ */
+export class ForceToolsHelper {
+    /**
+     * Initialize with force_tools list from request.
+     * @param {Array<string>} forceTools - List of tool names from request (e.g., ['code', 'search', 'xyz'])
+     */
+    constructor(forceTools?: Array<string>);
+    tools: string[];
+    /**
+     * Check if a specific tool is forced.
+     * @param {string} toolName - Name of the tool to check (e.g., 'code', 'search')
+     * @returns {boolean} True if tool is forced
+     */
+    has(toolName: string): boolean;
+    /**
+     * Get all forced tools.
+     * @returns {Array<string>} List of forced tool names
+     */
+    getAll(): Array<string>;
+    /**
+     * Check if no tools are forced.
+     * @returns {boolean} True if no tools are forced
+     */
+    isEmpty(): boolean;
+    /**
+     * Get count of forced tools.
+     * @returns {number} Number of forced tools
+     */
+    count(): number;
+}
+/**
  * Helper class for easy access to variables from Lexia requests.
  */
 export class Variables {
@@ -104,4 +136,18 @@ export function formatSystemPrompt(systemMessage?: string, projectSystemMessage?
  * @returns {Array} List of messages formatted for AI API
  */
 export function formatMessagesForAI(systemPrompt: string, conversationHistory: any[], currentMessage: string): any[];
+/**
+ * Decode a base64 encoded file and save to temporary file.
+ * @param {string} fileBase64 - Base64 encoded file data (data URI format: "data:mime;base64,...")
+ * @param {string} filename - Optional filename to use for extension detection
+ * @returns {Object} Object with filePath and isTempFile properties
+ *
+ * @example
+ * const { filePath, isTempFile } = decodeBase64File(data.file_base64, data.file_name);
+ * // Use the file
+ * if (isTempFile) {
+ *   fs.unlinkSync(filePath); // Clean up
+ * }
+ */
+export function decodeBase64File(fileBase64: string, filename?: string): any;
 //# sourceMappingURL=utils.d.ts.map

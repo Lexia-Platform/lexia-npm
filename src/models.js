@@ -43,12 +43,13 @@ class ChatMessage {
     this.channel = data.channel;
     this.file_type = data.file_type || '';
     this.file_url = data.file_url || '';
+    this.file_base64 = data.file_base64 || ''; // Base64 encoded file (data URI format)
+    this.file_name = data.file_name || ''; // Original filename
     this.variables = data.variables || [];
     this.url = data.url;
     this.url_update = data.url_update || '';
     this.url_upload = data.url_upload || '';
-    this.force_search = data.force_search || false;
-    this.force_code = data.force_code || null;
+    this.force_tools = data.force_tools || null; // List of forced tool names
     this.system_message = data.system_message || null;
     this.memory = data.memory || new Memory();
     this.project_system_message = data.project_system_message || null;
@@ -58,6 +59,7 @@ class ChatMessage {
     this.stream_url = data.stream_url || null;
     this.stream_token = data.stream_token || null;
     this.headers = data.headers || null;
+    this.sleep_time = data.sleep_time || null;
   }
 }
 

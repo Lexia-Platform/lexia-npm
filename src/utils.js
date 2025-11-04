@@ -123,6 +123,52 @@ class MemoryHelper {
 }
 
 /**
+ * Helper class for easy access to force_tools data from Lexia requests.
+ */
+class ForceToolsHelper {
+  /**
+   * Initialize with force_tools list from request.
+   * @param {Array<string>} forceTools - List of tool names from request (e.g., ['code', 'search', 'xyz'])
+   */
+  constructor(forceTools = null) {
+    this.tools = forceTools || [];
+  }
+
+  /**
+   * Check if a specific tool is forced.
+   * @param {string} toolName - Name of the tool to check (e.g., 'code', 'search')
+   * @returns {boolean} True if tool is forced
+   */
+  has(toolName) {
+    return this.tools.includes(toolName);
+  }
+
+  /**
+   * Get all forced tools.
+   * @returns {Array<string>} List of forced tool names
+   */
+  getAll() {
+    return [...this.tools];
+  }
+
+  /**
+   * Check if no tools are forced.
+   * @returns {boolean} True if no tools are forced
+   */
+  isEmpty() {
+    return this.tools.length === 0;
+  }
+
+  /**
+   * Get count of forced tools.
+   * @returns {number} Number of forced tools
+   */
+  count() {
+    return this.tools.length;
+  }
+}
+
+/**
  * Helper class for easy access to variables from Lexia requests.
  */
 class Variables {
@@ -260,14 +306,105 @@ function formatMessagesForAI(systemPrompt, conversationHistory, currentMessage) 
   return messages;
 }
 
+/**
+ * Decode a base64 encoded file and save to temporary file.
+ * @param {string} fileBase64 - Base64 encoded file data (data URI format: "data:mime;base64,...")
+ * @param {string} filename - Optional filename to use for extension detection
+ * @returns {Object} Object with filePath and isTempFile properties
+ * 
+ * @example
+ * const { filePath, isTempFile } = decodeBase64File(data.file_base64, data.file_name);
+ * // Use the file
+ * if (isTempFile) {
+ *   fs.unlinkSync(filePath); // Clean up
+ * }
+ */
+function decodeBase64File(fileBase64, filename = null) {
+  if (!fileBase64) {
+    throw new Error('file_base64 is empty');
+  }
+
+  try {
+    let base64Data, mimeType;
+
+    // Parse data URI: "data:audio/wav;base64,UklGRiQAAABXQVZF..."
+    if (fileBase64.startsWith('data:')) {
+      // Split header and data
+      const parts = fileBase64.split(',', 2);
+      const header = parts[0];
+      base64Data = parts[1];
+      // Extract MIME type
+      mimeType = header.split(':')[1].split(';')[0];
+      console.log(`Detected MIME type: ${mimeType}`);
+    } else {
+      // Assume it's just base64 without data URI prefix
+      base64Data = fileBase64;
+      mimeType = null;
+    }
+
+    // Decode base64
+    const fileBuffer = Buffer.from(base64Data, 'base64');
+    console.log(`Decoded ${fileBuffer.length} bytes from base64`);
+
+    // Determine file extension
+    let ext;
+    if (filename) {
+      // Use extension from provided filename
+      const path = require('path');
+      ext = path.extname(filename);
+    } else if (mimeType) {
+      // Derive extension from MIME type
+      const mimeToExt = {
+        'audio/wav': '.wav',
+        'audio/mpeg': '.mp3',
+        'audio/mp3': '.mp3',
+        'audio/ogg': '.ogg',
+        'audio/flac': '.flac',
+        'video/mp4': '.mp4',
+        'video/avi': '.avi',
+        'video/quicktime': '.mov',
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/gif': '.gif',
+        'application/pdf': '.pdf',
+        'text/plain': '.txt'
+      };
+      ext = mimeToExt[mimeType] || '.bin';
+    } else {
+      ext = '.bin';
+    }
+
+    // Create temporary file
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    const crypto = require('crypto');
+    
+    const tempDir = os.tmpdir();
+    const randomName = crypto.randomBytes(16).toString('hex');
+    const tempFilePath = path.join(tempDir, `${randomName}${ext}`);
+    
+    fs.writeFileSync(tempFilePath, fileBuffer);
+    
+    console.log(`Saved decoded file to: ${tempFilePath}`);
+    return { filePath: tempFilePath, isTempFile: true };
+
+  } catch (error) {
+    console.error(`Error decoding base64 file: ${error.message}`);
+    throw new Error(`Failed to decode base64 file: ${error.message}`);
+  }
+}
+
 module.exports = {
   setEnvVariables,
   MemoryHelper,
+  ForceToolsHelper,
   Variables,
   getVariableValue,
   getOpenAIApiKey,
   formatSystemPrompt,
-  formatMessagesForAI
+  formatMessagesForAI,
+  decodeBase64File
 };
 
 

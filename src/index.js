@@ -6,7 +6,7 @@
  * Contains only essential components for communication.
  */
 
-const VERSION = '1.0.0';
+const VERSION = '1.2.9';
 
 // Core exports
 const { ChatResponse, ChatMessage, Variable, Memory } = require('./models');
@@ -16,7 +16,9 @@ const {
   getVariableValue, 
   getOpenAIApiKey, 
   Variables, 
-  MemoryHelper 
+  MemoryHelper,
+  ForceToolsHelper,
+  decodeBase64File
 } = require('./utils');
 const { DevStreamClient } = require('./dev-stream-client');
 
@@ -45,6 +47,8 @@ module.exports = {
   getOpenAIApiKey,
   Variables,
   MemoryHelper,
+  ForceToolsHelper,
+  decodeBase64File,
   
   // Web (optional)
   createLexiaApp,

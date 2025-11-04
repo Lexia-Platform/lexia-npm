@@ -354,24 +354,155 @@ class LexiaSession {
   constructor(handler, data) {
     this._h = handler;
     this._d = data;
+    // Progressive tracing buffer
+    this._progressiveTraceBuffer = null;
+    this._progressiveTraceVisibility = 'all';
     // Preconfigure Centrifugo in prod
     if (!handler.devMode && data.stream_url && data.stream_token) {
       handler.updateCentrifugoConfig(data.stream_url, data.stream_token);
     }
   }
+  
   async stream(content) { return this._h.stream(this._d, content); }
   async close(usageInfo = null, fileUrl = null) { return this._h.close(this._d, usageInfo, fileUrl); }
   async error(message, exception = null, trace = null) { return this._h.sendError(this._d, message, trace, exception); }
+  
   // Loading helpers
   _loadingMarker(kind, action) {
     const k = (kind || 'thinking').toLowerCase();
     const a = action === 'start' ? 'start' : 'end';
     return `[lexia.loading.${['image','code','search','thinking'].includes(k)?k:'thinking'}.${a}]\n\n`;
   }
+  
   async start_loading(kind = 'thinking') { return this.stream(this._loadingMarker(kind, 'start')); }
   async end_loading(kind = 'thinking') { return this.stream(this._loadingMarker(kind, 'end')); }
+  
+  // Image helper: wrap URL with lexia image markers
   async image(url) { if (url) return this.stream(`[lexia.image.start]${url}[lexia.image.end]`); }
   async pass_image(url) { return this.image(url); }
+  
+  // Tracing helper: wrap content with lexia tracing markers
+  /**
+   * Send tracing information with visibility control.
+   * @param {string} content - The tracing text content to display
+   * @param {string} visibility - Who can see this trace - "all" or "admin" (default: "all")
+   */
+  async tracing(content, visibility = 'all') {
+    if (!content) return;
+    
+    // Validate visibility parameter
+    if (!['all', 'admin'].includes(visibility)) {
+      console.warn(`Invalid visibility '${visibility}', defaulting to 'all'`);
+      visibility = 'all';
+    }
+    
+    const payload = `[lexia.tracing.start]\n- visibility: ${visibility}\ncontent: ${content}\n[lexia.tracing.end]`;
+    return this.stream(payload);
+  }
+  
+  // Progressive tracing API
+  /**
+   * Start a progressive trace block that can be built incrementally.
+   * 
+   * Use this when you want to build a single trace entry over time,
+   * updating it as progress happens, rather than creating multiple
+   * separate trace entries.
+   * 
+   * @param {string} message - Initial message to start the trace with
+   * @param {string} visibility - Who can see this trace - "all" or "admin" (default: "all")
+   * 
+   * @example
+   * session.tracing_begin("🔄 Processing chunks:", "all");
+   * for (let i = 0; i < 10; i++) {
+   *   session.tracing_append(`\n  • Chunk ${i+1}/10...`);
+   *   // ... do work ...
+   *   session.tracing_append(` ✓`);
+   * }
+   * session.tracing_end("\n✅ All done!");
+   */
+  tracing_begin(message, visibility = 'all') {
+    if (!message) return;
+    
+    // Validate visibility
+    if (!['all', 'admin'].includes(visibility)) {
+      console.warn(`Invalid visibility '${visibility}', defaulting to 'all'`);
+      visibility = 'all';
+    }
+    
+    // Initialize progressive trace buffer
+    this._progressiveTraceBuffer = message;
+    this._progressiveTraceVisibility = visibility;
+    console.log(`Progressive trace started with visibility '${visibility}'`);
+  }
+  
+  /**
+   * Append content to the current progressive trace block.
+   * 
+   * Must be called after tracing_begin(). Appends the message to
+   * the internal buffer. The complete trace will be sent when
+   * tracing_end() is called.
+   * 
+   * @param {string} message - Content to append to the progressive trace
+   * 
+   * @example
+   * session.tracing_begin("Processing:");
+   * session.tracing_append("\n  - Step 1 done");
+   * session.tracing_append("\n  - Step 2 done");
+   * session.tracing_end();
+   */
+  tracing_append(message) {
+    if (this._progressiveTraceBuffer === null) {
+      console.warn('tracing_append() called without tracing_begin(). Call tracing_begin() first.');
+      return;
+    }
+    
+    if (!message) return;
+    
+    // Append to buffer
+    this._progressiveTraceBuffer += message;
+    console.log(`Appended to progressive trace: ${message.length} chars`);
+  }
+  
+  /**
+   * Complete and send the progressive trace block.
+   * 
+   * Optionally append a final message, then send the complete
+   * trace content as a single trace entry.
+   * 
+   * @param {string} message - Optional final message to append before sending
+   * 
+   * @example
+   * session.tracing_begin("Processing items:");
+   * for (const item of items) {
+   *   session.tracing_append(`\n  • ${item}...`);
+   *   process(item);
+   *   session.tracing_append(" ✓");
+   * }
+   * session.tracing_end("\n✅ Complete!");
+   */
+  async tracing_end(message = null) {
+    if (this._progressiveTraceBuffer === null) {
+      console.warn('tracing_end() called without tracing_begin(). Nothing to send.');
+      return;
+    }
+    
+    // Append optional final message
+    if (message) {
+      this._progressiveTraceBuffer += message;
+    }
+    
+    // Send the complete trace
+    const completeContent = this._progressiveTraceBuffer;
+    const visibility = this._progressiveTraceVisibility;
+    
+    // Clear buffer
+    this._progressiveTraceBuffer = null;
+    this._progressiveTraceVisibility = 'all';
+    
+    // Send as a single trace entry
+    await this.tracing(completeContent, visibility);
+    console.log(`Progressive trace completed and sent: ${completeContent.length} chars`);
+  }
 }
 
 LexiaHandler.prototype.begin = function(data) { return new LexiaSession(this, data); };

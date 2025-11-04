@@ -25,11 +25,16 @@ npm link
 ## 📦 Package Information
 
 - **Package Name**: `@lexia/sdk`
-- **Version**: 1.0.0
+- **Version**: 1.2.9
 - **Node**: >=14.0.0
 - **License**: MIT
-- **Dependencies**: axios
+- **Dependencies**: axios, express
 - **Optional**: express (for web framework integration)
+
+## 📖 Full Documentation
+
+- **[LEXIA_USAGE_GUIDE.md](./LEXIA_USAGE_GUIDE.md)** - Complete API reference with examples
+- **[CHANGELOG.md](./CHANGELOG.md)** - Version history and release notes
 
 ## 🎯 Purpose
 
@@ -47,7 +52,12 @@ This package provides a clean interface for AI agents to communicate with the Le
 - **Header forwarding** (x-tenant, etc.) to Lexia API
 - **Easy variable access** with Variables helper class
 - **User memory handling** with MemoryHelper for personalized responses
+- **Force tools helper** ⭐ NEW in v1.2.9
+- **Progressive tracing API** ⭐ NEW in v1.2.9
+- **Base64 file handling** ⭐ NEW in v1.2.9
 - **Dev mode** with in-memory streaming for local development
+- **Automatic file upload handling** in dev mode ⭐ NEW in v1.2.9
+- **Full TypeScript support** with comprehensive type definitions
 - **Graceful fallback** when web dependencies aren't available
 
 ## 📁 Package Structure
@@ -76,7 +86,28 @@ This package provides a clean interface for AI agents to communicate with the Le
 
 ## 🚀 Usage Examples
 
-### Basic Usage
+### Basic Usage (New Session API - Recommended)
+```javascript
+const { LexiaHandler } = require('@lexia/sdk');
+
+// Initialize the handler (dev mode)
+const lexia = new LexiaHandler(true);
+
+// Use in your AI agent
+async function processMessage(data) {
+  const session = lexia.begin(data);
+  
+  // Stream your AI response
+  await session.stream("Hello ");
+  await session.stream("from your ");
+  await session.stream("AI agent!");
+  
+  // Complete the response
+  await session.close();
+}
+```
+
+### Classic Usage (Still Supported)
 ```javascript
 const { LexiaHandler, ChatMessage } = require('@lexia/sdk');
 
@@ -162,6 +193,12 @@ const { ChatMessage, ChatResponse, Variable, Memory } = require('@lexia/sdk');
 // ChatResponse - Lexia's expected response format  
 // Variable - Environment variables from Lexia request
 // Memory - User memory data from Lexia request
+
+// New in v1.2.9: ChatMessage now includes:
+// - file_base64: Base64 encoded file data
+// - file_name: Original filename
+// - force_tools: Array of forced tool names (replaced force_search/force_code)
+// - sleep_time: Optional sleep time parameter
 ```
 
 ### Variables Helper
@@ -233,6 +270,88 @@ if (!memory.isEmpty()) {
 - `"memory": {"name": "John", "goals": [...]}` - Structured memory
 - `"memory": null` - Null value (treated as empty memory)
 
+### Force Tools Helper ⭐ NEW in v1.2.9
+Check which tools are forced by the user:
+
+```javascript
+const { ForceToolsHelper } = require('@lexia/sdk');
+
+// Create helper from request data
+const tools = new ForceToolsHelper(data.force_tools);
+
+// Check if specific tool is forced
+if (tools.has("search")) {
+  // Perform search
+}
+if (tools.has("code")) {
+  // Use code tool
+}
+
+// Get all forced tools
+const allTools = tools.getAll();  // ["search", "code", ...]
+
+// Check if any tools are forced
+if (!tools.isEmpty()) {
+  console.log(`${tools.count()} tools forced`);
+}
+```
+
+### File Utilities ⭐ NEW in v1.2.9
+Decode base64-encoded files:
+
+```javascript
+const { decodeBase64File } = require('@lexia/sdk');
+const fs = require('fs');
+
+// Decode base64 file to temporary file
+const { filePath, isTempFile } = decodeBase64File(
+  data.file_base64,
+  data.file_name
+);
+
+// Use the file
+const content = fs.readFileSync(filePath);
+
+// Clean up if temporary
+if (isTempFile) {
+  fs.unlinkSync(filePath);
+}
+```
+
+### Session API ⭐ NEW in v1.2.9
+The new session-based API provides a cleaner interface:
+
+```javascript
+const session = lexia.begin(data);
+
+// Stream content
+await session.stream("Hello ");
+await session.stream("World!");
+
+// Show loading indicators
+await session.start_loading("thinking");
+await session.end_loading("thinking");
+
+// Display images
+await session.image("https://example.com/image.png");
+
+// Add tracing for debugging
+await session.tracing("Processing step 1", "all");
+await session.tracing("Internal debug info", "admin");
+
+// Progressive tracing (builds a single trace incrementally)
+session.tracing_begin("Processing items:");
+session.tracing_append("\n  - Item 1 ✓");
+session.tracing_append("\n  - Item 2 ✓");
+await session.tracing_end("\n✅ Complete!");
+
+// Handle errors
+await session.error("Something went wrong", error);
+
+// Complete the response
+const fullText = await session.close(usageInfo);
+```
+
 ### Response Handler
 Create Lexia-compatible responses:
 
@@ -252,7 +371,7 @@ const completeResponse = createCompleteResponse(
 );
 ```
 
-## 💡 Complete Example: AI Agent with Express
+## 💡 Complete Example: AI Agent with Express (v1.2.9)
 
 ```javascript
 const express = require('express');
@@ -260,6 +379,7 @@ const {
   LexiaHandler,
   Variables,
   MemoryHelper,
+  ForceToolsHelper,
   createLexiaApp,
   addStandardEndpoints
 } = require('@lexia/sdk');
@@ -274,14 +394,19 @@ const app = createLexiaApp({
   description: 'Custom AI agent with Lexia integration'
 });
 
-// Define your AI logic
+// Define your AI logic using the new Session API
 async function processMessage(data) {
+  const session = lexia.begin(data);
+  
   try {
     // Easy access to environment variables
     const vars = new Variables(data.variables);
     
     // Easy access to user memory
     const memory = new MemoryHelper(data.memory);
+    
+    // Check forced tools (NEW in v1.2.9)
+    const tools = new ForceToolsHelper(data.force_tools);
     
     // Get API keys
     const openaiKey = vars.get('OPENAI_API_KEY');
@@ -292,36 +417,48 @@ async function processMessage(data) {
     
     // Check if required variables exist
     if (!openaiKey) {
-      await lexia.sendError(data, 'No AI API key provided');
+      await session.error('No AI API key provided');
       return;
     }
+    
+    // Show loading indicator
+    await session.start_loading("thinking");
+    
+    // Add tracing for debugging (NEW in v1.2.9)
+    await session.tracing(`User: ${userName || 'Anonymous'}`, "admin");
     
     // Create personalized response based on user memory
     let response;
     if (memory.hasName()) {
-      response = `Hello ${userName}! AI Agent processed: ${data.message}`;
+      response = `Hello ${userName}! `;
     } else {
-      response = `AI Agent processed: ${data.message}`;
+      response = `Hello! `;
     }
+    
+    // Stream response word by word
+    await session.end_loading("thinking");
+    await session.stream(response);
     
     // Add user-specific context if available
     if (memory.hasGoals()) {
-      response += `\n\nI see your goals include: ${userGoals.join(', ')}`;
+      await session.stream(`\n\nI see your goals include: ${userGoals.join(', ')}`);
     }
     
-    // Stream response chunks (optional)
-    const words = response.split(' ');
-    for (const word of words) {
-      await lexia.streamChunk(data, word + ' ');
-      await new Promise(resolve => setTimeout(resolve, 100));
+    // Check if search is forced (NEW in v1.2.9)
+    if (tools.has('search')) {
+      await session.stream('\n\n[Performing search as requested...]');
     }
     
     // Complete the response
-    await lexia.completeResponse(data, response);
+    await session.close({
+      prompt_tokens: 10,
+      completion_tokens: 50,
+      total_tokens: 60
+    });
     
   } catch (error) {
     // Handle errors appropriately with trace logging
-    await lexia.sendError(data, `Error processing message: ${error.message}`, null, error);
+    await session.error(`Error processing message: ${error.message}`, error);
   }
 }
 
@@ -401,7 +538,7 @@ Error: Cannot find module 'express'
 ```bash
 npm pack
 # Test the package locally
-npm install ./lexia-sdk-1.2.5.tgz
+npm install ./lexia-sdk-1.2.9.tgz
 ```
 
 ### Production npm
@@ -443,7 +580,10 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📚 Documentation
 
-For more detailed documentation, please refer to the inline code comments and examples provided in this README.
+- **[LEXIA_USAGE_GUIDE.md](./LEXIA_USAGE_GUIDE.md)** - Complete API reference with all methods and examples
+- **[CHANGELOG.md](./CHANGELOG.md)** - Full version history and release notes
+- Inline code comments in all source files
+- TypeScript definitions for IDE autocomplete
 
 ## 🔗 Links
 

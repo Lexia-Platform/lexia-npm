@@ -133,6 +133,52 @@ function addStandardEndpoints(app, options = {}) {
           return res.status(400).json({ error: 'Missing required fields' });
         }
 
+        // DEV MODE: Handle base64 file upload
+        if (lexiaHandler.devMode && data.file_base64 && !data.file_url) {
+          const { decodeBase64File } = require('../utils');
+          const path = require('path');
+          const fs = require('fs');
+          
+          console.log('🔧 Dev mode: Converting file_base64 to file_url');
+          
+          try {
+            // Decode base64 to file
+            const { filePath } = decodeBase64File(data.file_base64, data.file_name);
+            
+            // Create uploads directory if it doesn't exist
+            const uploadsDir = 'uploads';
+            if (!fs.existsSync(uploadsDir)) {
+              fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            
+            // Move file to uploads directory with original name
+            let filename = data.file_name || path.basename(filePath);
+            // Sanitize filename
+            filename = filename.replace(/[^a-zA-Z0-9.\-_]/g, '');
+            let destPath = path.join(uploadsDir, filename);
+            
+            // If file exists, add timestamp
+            if (fs.existsSync(destPath)) {
+              const ext = path.extname(filename);
+              const name = path.basename(filename, ext);
+              filename = `${name}_${Date.now()}${ext}`;
+              destPath = path.join(uploadsDir, filename);
+            }
+            
+            fs.renameSync(filePath, destPath);
+            
+            // Create HTTP URL for local access (served by static files endpoint)
+            // Default to localhost:5001, but could be configured
+            const port = process.env.LEXIA_PORT || '5001';
+            data.file_url = `http://localhost:${port}/uploads/${filename}`;
+            
+            console.log(`✅ Converted base64 to file_url: ${data.file_url}`);
+          } catch (error) {
+            console.error(`Failed to convert base64 to file: ${error.message}`);
+            return res.status(400).json({ error: `Failed to process file: ${error.message}` });
+          }
+        }
+
         // DEV MODE: Return streaming response directly
         if (lexiaHandler.devMode) {
           console.log('🔧 Dev mode: Streaming response directly');
@@ -246,6 +292,17 @@ function addStandardEndpoints(app, options = {}) {
 
   // Mount router
   app.use('/api/v1', router);
+
+  // Add static file serving for uploads (dev mode)
+  if (lexiaHandler && lexiaHandler.devMode) {
+    const fs = require('fs');
+    const uploadsDir = 'uploads';
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    app.use('/uploads', express.static(uploadsDir));
+    console.log(`📁 Dev mode: Serving static files from /${uploadsDir}`);
+  }
 
   return app;
 }

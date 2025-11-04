@@ -38,12 +38,13 @@ export class ChatMessage {
     channel: any;
     file_type: any;
     file_url: any;
+    file_base64: any;
+    file_name: any;
     variables: any;
     url: any;
     url_update: any;
     url_upload: any;
-    force_search: any;
-    force_code: any;
+    force_tools: any;
     system_message: any;
     memory: any;
     project_system_message: any;
@@ -53,6 +54,7 @@ export class ChatMessage {
     stream_url: any;
     stream_token: any;
     headers: any;
+    sleep_time: any;
 }
 /**
  * Response model for chat requests matching Lexia's expected format.

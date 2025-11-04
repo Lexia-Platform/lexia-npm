@@ -9,6 +9,8 @@ import { getVariableValue } from "./utils";
 import { getOpenAIApiKey } from "./utils";
 import { Variables } from "./utils";
 import { MemoryHelper } from "./utils";
+import { ForceToolsHelper } from "./utils";
+import { decodeBase64File } from "./utils";
 export let createLexiaApp: any;
 export let addStandardEndpoints: any;
 /**
@@ -18,6 +20,6 @@ export let addStandardEndpoints: any;
  * Clean, minimal package for Lexia platform integration.
  * Contains only essential components for communication.
  */
-export const VERSION: "1.0.0";
-export { ChatResponse, ChatMessage, Variable, Memory, createSuccessResponse, LexiaHandler, DevStreamClient, getVariableValue, getOpenAIApiKey, Variables, MemoryHelper };
+export const VERSION: "1.2.9";
+export { ChatResponse, ChatMessage, Variable, Memory, createSuccessResponse, LexiaHandler, DevStreamClient, getVariableValue, getOpenAIApiKey, Variables, MemoryHelper, ForceToolsHelper, decodeBase64File };
 //# sourceMappingURL=index.d.ts.map
